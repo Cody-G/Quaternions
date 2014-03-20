@@ -45,6 +45,9 @@ conj( q::Quaternion ) = Quaternion( q.s, -q.v1, -q.v2, -q.v3, q.norm )
 abs( q::Quaternion ) = sqrt( q.s*q.s + q.v1*q.v1 + q.v2*q.v2 + q.v3*q.v3 )
 abs2( q::Quaternion ) = q.s*q.s + q.v1*q.v1 + q.v2*q.v2 + q.v3*q.v3
 inv( q::Quaternion ) = q.norm ? conj(q) : conj(q)/abs2(q)
+#taken from Andrioni's Quaternions.jl
+ispure(z::Quaternion) = z.s == 0 && (z.v1 != 0 || z.v2 != 0 || z.v3 != 0)
+
 
 function normalize( q::Quaternion )
   if ( q.norm )
@@ -196,3 +199,58 @@ end
 
 quatrand() = quat( randn(), randn(), randn(), randn() )
 nquatrand() = normalize( quatrand() )
+
+
+
+## Unit vector, unit quaternion, and rotations taken from Andrioni's Quaternions.jl
+function unit{T}(v::Vector{T})
+    nv = norm(v)
+    if nv > 0
+        return v/nv
+    end
+    zeros(promote_type(T,typeof(nv)), length(v))
+end
+
+function unit{T}(q::Quaternion{T})
+    nq = norm(q)
+    if nq > 0
+        return q/nq
+    end
+    TT = promote_type(T, typeof(nq))
+    z = zero(TT)
+    Quaternion(z,z,z,z)
+end
+
+function qrotation{T<:FloatingPoint}(axis::Vector{T}, theta)
+    if length(axis) != 3
+        error("Must be a 3-vector")
+    end
+    u = unit(axis)
+    thetaT = convert(eltype(u), theta)
+    s = sin(thetaT/2)
+    Quaternion(cos(thetaT/2), s*u[1], s*u[2], s*u[3])
+end
+qrotation{T<:Real}(rotvec::Vector{T}, theta) = qrotation(float(rotvec), theta)
+
+# Variant of the above where the norm encodes theta
+function qrotation{T<:FloatingPoint}(rotvec::Vector{T})
+    if length(rotvec) != 3
+        error("Must be a 3-vector")
+    end
+    theta = norm(rotvec)
+    if theta > 0
+        s_ = sin(theta/2)/theta  # divide by theta to make rotvec a unit vector
+        return Quaternion(cos(theta/2), s_*rotvec[1], s_*rotvec[2], s_*rotvec[3])
+    end
+    Quaternion(one(T), zero(T), zero(T), zero(T))
+end
+qrotation{T<:Real}(rotvec::Vector{T}) = qrotation(float(rotvec))
+
+
+rotationmatrix(q::Quaternion) = rotationmatrix_normalized(unit(q))
+
+rotationmatrix_normalized(q::Quaternion) =
+    [1-2*q.v2*q.v2-2*q.v2*q.v3  2*(q.v1*q.v2+q.s*q.v3)    2*(q.v1*q.v3-q.s*q.v2);
+     2*(q.v1*q.v2-q.s*q.v3)    1-2*q.v1*q.v1-2*q.v3*q.v3  2*(q.v2*q.v3+q.s*q.v1);
+     2*(q.v1*q.v3+q.s*q.v2)    2*(q.v2*q.v3-q.s*q.v1)    1-2*q.v1*q.v1-2*q.v2*q.v2]
+
